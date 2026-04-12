@@ -1,0 +1,521 @@
+#!/bin/bash
+
+# =============================================================================
+#  setup-dev.sh — Environnement de dev complet (WSL2/Linux + macOS)
+# =============================================================================
+
+set -e
+
+# --- Couleurs ---
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+log()     { echo -e "${GREEN}[✓]${NC} $1"; }
+info()    { echo -e "${BLUE}[→]${NC} $1"; }
+warn()    { echo -e "${YELLOW}[!]${NC} $1"; }
+error()   { echo -e "${RED}[✗]${NC} $1"; exit 1; }
+section() { echo -e "\n${CYAN}${BOLD}━━━ $1 ━━━${NC}\n"; }
+
+# =============================================================================
+#  DÉTECTION OS
+# =============================================================================
+detect_os() {
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    OS="mac"
+    info "Système détecté : macOS"
+  elif [[ -f /etc/os-release ]]; then
+    source /etc/os-release
+    OS="linux"
+    DISTRO=$ID
+    info "Système détecté : Linux ($DISTRO)"
+  else
+    error "Système non supporté."
+  fi
+}
+
+# =============================================================================
+#  VÉRIFICATION : ne pas tourner en root
+# =============================================================================
+check_not_root() {
+  if [[ "$EUID" -eq 0 ]]; then
+    error "Ne lance pas ce script en root. Utilise ton utilisateur normal (sudo sera appelé si besoin)."
+  fi
+}
+
+# =============================================================================
+#  macOS — Homebrew
+# =============================================================================
+install_homebrew() {
+  if ! command -v brew &>/dev/null; then
+    info "Installation de Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || eval "$(/usr/local/bin/brew shellenv)" 2>/dev/null
+    log "Homebrew installé"
+  else
+    log "Homebrew déjà présent"
+    brew update
+  fi
+}
+
+# =============================================================================
+#  Linux — Dépendances de base
+# =============================================================================
+install_base_linux() {
+  section "Dépendances système"
+  sudo apt-get update -qq
+  sudo apt-get install -y \
+    curl wget git unzip zip \
+    build-essential ca-certificates gnupg \
+    lsb-release software-properties-common \
+    apt-transport-https \
+    jq make htop zsh fzf \
+    xdg-utils
+  log "Dépendances de base installées"
+}
+
+# =============================================================================
+#  macOS — Dépendances de base
+# =============================================================================
+install_base_mac() {
+  section "Dépendances système"
+  brew install curl wget git jq make htop fzf zsh
+  log "Dépendances de base installées"
+}
+
+# =============================================================================
+#  ZSH + OH MY ZSH
+# =============================================================================
+install_zsh() {
+  section "Zsh + Oh My Zsh"
+
+  # Oh My Zsh
+  if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
+    info "Installation de Oh My Zsh..."
+    RUNZSH=no CHSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+    log "Oh My Zsh installé"
+  else
+    log "Oh My Zsh déjà présent"
+  fi
+
+  # Plugin : zsh-autosuggestions
+  local ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+  if [[ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]]; then
+    git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions \
+      "$ZSH_CUSTOM/plugins/zsh-autosuggestions"
+    log "Plugin zsh-autosuggestions installé"
+  fi
+
+  # Plugin : zsh-syntax-highlighting
+  if [[ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]]; then
+    git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting \
+      "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
+    log "Plugin zsh-syntax-highlighting installé"
+  fi
+
+  # Thème : Powerlevel10k
+  if [[ ! -d "$ZSH_CUSTOM/themes/powerlevel10k" ]]; then
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k \
+      "$ZSH_CUSTOM/themes/powerlevel10k"
+    log "Thème Powerlevel10k installé"
+  fi
+
+  # Mise à jour du .zshrc
+  info "Configuration du .zshrc..."
+  cat > "$HOME/.zshrc" << 'EOF'
+# Powerlevel10k instant prompt
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+export ZSH="$HOME/.oh-my-zsh"
+ZSH_THEME="powerlevel10k/powerlevel10k"
+
+plugins=(
+  git
+  zsh-autosuggestions
+  zsh-syntax-highlighting
+  docker
+  kubectl
+  terraform
+  helm
+  fzf
+  history
+  sudo
+)
+
+source $ZSH/oh-my-zsh.sh
+
+# --- NVM ---
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && source "$NVM_DIR/bash_completion"
+
+# --- Pyenv ---
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)" 2>/dev/null || true
+
+# --- FZF ---
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# --- Aliases utiles ---
+alias k="kubectl"
+alias tf="terraform"
+alias d="docker"
+alias dc="docker compose"
+alias gs="git status"
+alias gp="git push"
+alias gl="git pull"
+alias gc="git commit -m"
+alias ll="ls -lah"
+
+# --- Powerlevel10k config ---
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+EOF
+
+  # Changer le shell par défaut
+  if [[ "$SHELL" != "$(which zsh)" ]]; then
+    info "Changement du shell par défaut vers zsh..."
+    if [[ "$OS" == "linux" ]]; then
+      sudo chsh -s "$(which zsh)" "$USER"
+    else
+      chsh -s "$(which zsh)"
+    fi
+    log "Shell par défaut → zsh"
+  fi
+}
+
+# =============================================================================
+#  DOCKER
+# =============================================================================
+install_docker() {
+  section "Docker"
+  if command -v docker &>/dev/null; then
+    log "Docker déjà installé ($(docker --version))"
+    return
+  fi
+
+  if [[ "$OS" == "linux" ]]; then
+    info "Installation de Docker..."
+    curl -fsSL https://get.docker.com | sudo sh
+    sudo usermod -aG docker "$USER"
+    log "Docker installé — déconnecte/reconnecte-toi pour utiliser Docker sans sudo"
+  else
+    warn "Sur macOS, installe Docker Desktop manuellement : https://www.docker.com/products/docker-desktop/"
+  fi
+}
+
+# =============================================================================
+#  KUBECTL
+# =============================================================================
+install_kubectl() {
+  section "kubectl"
+  if command -v kubectl &>/dev/null; then
+    log "kubectl déjà installé ($(kubectl version --client --short 2>/dev/null || kubectl version --client))"
+    return
+  fi
+
+  if [[ "$OS" == "linux" ]]; then
+    local VERSION
+    VERSION=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
+    curl -fsSL "https://dl.k8s.io/release/$VERSION/bin/linux/amd64/kubectl" -o /tmp/kubectl
+    sudo install -o root -g root -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+    rm /tmp/kubectl
+  else
+    brew install kubectl
+  fi
+  log "kubectl installé ($(kubectl version --client --short 2>/dev/null || echo 'ok'))"
+}
+
+# =============================================================================
+#  K9S
+# =============================================================================
+install_k9s() {
+  section "k9s"
+  if command -v k9s &>/dev/null; then
+    log "k9s déjà installé"
+    return
+  fi
+
+  if [[ "$OS" == "linux" ]]; then
+    local VERSION
+    VERSION=$(curl -fsSL https://api.github.com/repos/derailed/k9s/releases/latest | jq -r .tag_name)
+    curl -fsSL "https://github.com/derailed/k9s/releases/download/$VERSION/k9s_Linux_amd64.tar.gz" | \
+      sudo tar -xz -C /usr/local/bin k9s
+  else
+    brew install k9s
+  fi
+  log "k9s installé"
+}
+
+# =============================================================================
+#  K3S
+# =============================================================================
+install_k3s() {
+  section "k3s (Kubernetes léger)"
+  if command -v k3s &>/dev/null; then
+    log "k3s déjà installé ($(k3s --version | head -1))"
+    return
+  fi
+
+  if [[ "$OS" == "linux" ]]; then
+    info "Installation de k3s..."
+    curl -sfL https://get.k3s.io | sh -
+    # Donner accès au kubeconfig sans sudo
+    sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+    mkdir -p "$HOME/.kube"
+    sudo cp /etc/rancher/k3s/k3s.yaml "$HOME/.kube/config"
+    sudo chown "$USER:$USER" "$HOME/.kube/config"
+    log "k3s installé — cluster local prêt"
+  else
+    warn "Sur macOS, k3s n'est pas supporté nativement. Utilise Rancher Desktop à la place : https://rancherdesktop.io"
+  fi
+}
+
+# =============================================================================
+#  HELM
+# =============================================================================
+install_helm() {
+  section "Helm"
+  if command -v helm &>/dev/null; then
+    log "Helm déjà installé ($(helm version --short))"
+    return
+  fi
+
+  curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  log "Helm installé ($(helm version --short))"
+}
+
+# =============================================================================
+#  TERRAFORM
+# =============================================================================
+install_terraform() {
+  section "Terraform"
+  if command -v terraform &>/dev/null; then
+    log "Terraform déjà installé ($(terraform version -json | jq -r .terraform_version))"
+    return
+  fi
+
+  if [[ "$OS" == "linux" ]]; then
+    curl -fsSL https://apt.releases.hashicorp.com/gpg | \
+      sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+      https://apt.releases.hashicorp.com $(lsb_release -cs) main" | \
+      sudo tee /etc/apt/sources.list.d/hashicorp.list
+    sudo apt-get update -qq && sudo apt-get install -y terraform
+  else
+    brew tap hashicorp/tap
+    brew install hashicorp/tap/terraform
+  fi
+  log "Terraform installé"
+}
+
+# =============================================================================
+#  NVM + NODE
+# =============================================================================
+install_nvm() {
+  section "NVM + Node.js"
+  if [[ -d "$HOME/.nvm" ]]; then
+    log "NVM déjà installé"
+  else
+    info "Installation de NVM..."
+    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    log "NVM installé"
+  fi
+
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+
+  info "Installation de Node.js LTS..."
+  nvm install --lts
+  nvm use --lts
+  nvm alias default node
+
+  info "Installation des outils Node globaux..."
+  npm install -g typescript ts-node prettier eslint nodemon
+  log "Node.js $(node --version) + TypeScript installés"
+}
+
+# =============================================================================
+#  PYENV + PYTHON
+# =============================================================================
+install_pyenv() {
+  section "Pyenv + Python"
+
+  if [[ "$OS" == "linux" ]]; then
+    # Dépendances pyenv
+    sudo apt-get install -y \
+      libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev \
+      libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+  fi
+
+  if [[ ! -d "$HOME/.pyenv" ]]; then
+    info "Installation de Pyenv..."
+    curl -fsSL https://pyenv.run | bash
+    log "Pyenv installé"
+  else
+    log "Pyenv déjà installé"
+  fi
+
+  export PYENV_ROOT="$HOME/.pyenv"
+  export PATH="$PYENV_ROOT/bin:$PATH"
+  eval "$(pyenv init -)"
+
+  info "Installation de Python 3.12 (stable)..."
+  pyenv install -s 3.12
+  pyenv global 3.12
+
+  info "Installation de pipx..."
+  pip install --upgrade pip pipx
+  pipx ensurepath
+
+  info "Installation des outils Python globaux via pipx..."
+  pipx install poetry       # gestion de dépendances
+  pipx install black        # formatter
+  pipx install ruff         # linter ultra-rapide
+  pipx install httpie       # curl amélioré
+  pipx install pre-commit   # hooks git
+
+  log "Python $(python --version) + outils installés"
+}
+
+# =============================================================================
+#  GH CLI (GitHub)
+# =============================================================================
+install_gh() {
+  section "GitHub CLI (gh)"
+  if command -v gh &>/dev/null; then
+    log "gh déjà installé ($(gh --version | head -1))"
+    return
+  fi
+
+  if [[ "$OS" == "linux" ]]; then
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
+      sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] \
+      https://cli.github.com/packages stable main" | \
+      sudo tee /etc/apt/sources.list.d/github-cli.list
+    sudo apt-get update -qq && sudo apt-get install -y gh
+  else
+    brew install gh
+  fi
+  log "gh installé"
+}
+
+# =============================================================================
+#  CONFIGURATION GIT
+# =============================================================================
+configure_git() {
+  section "Configuration Git"
+  git config --global user.name "$GIT_NAME"
+  git config --global user.email "$GIT_EMAIL"
+  git config --global init.defaultBranch main
+  git config --global pull.rebase false
+  git config --global core.autocrlf false   # important sous WSL
+  git config --global core.editor "code --wait" 2>/dev/null || \
+    git config --global core.editor "nano"
+  log "Git configuré ($GIT_NAME / $GIT_EMAIL)"
+}
+
+# =============================================================================
+#  CLÉ SSH GITHUB
+# =============================================================================
+setup_ssh() {
+  section "Clé SSH GitHub"
+  local KEY="$HOME/.ssh/id_ed25519"
+  if [[ -f "$KEY" ]]; then
+    log "Clé SSH déjà existante"
+  else
+    info "Génération de la clé SSH..."
+    mkdir -p "$HOME/.ssh"
+    ssh-keygen -t ed25519 -C "$GIT_EMAIL" -f "$KEY" -N ""
+    log "Clé SSH générée"
+  fi
+
+  echo ""
+  warn "Ajoute cette clé publique sur GitHub → Settings → SSH keys :"
+  echo ""
+  cat "$KEY.pub"
+  echo ""
+  info "Lien direct : https://github.com/settings/ssh/new"
+}
+
+# =============================================================================
+#  RÉSUMÉ FINAL
+# =============================================================================
+print_summary() {
+  echo ""
+  echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${GREEN}${BOLD}  ✓ Installation terminée !${NC}"
+  echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo ""
+  echo -e "  ${BOLD}Ce qui a été installé :${NC}"
+  echo "   • Zsh + Oh My Zsh + Powerlevel10k"
+  echo "   • Docker"
+  echo "   • kubectl + k9s + k3s + Helm"
+  echo "   • Terraform"
+  echo "   • NVM + Node.js LTS + TypeScript"
+  echo "   • Pyenv + Python 3.12 + Poetry + Ruff"
+  echo "   • GitHub CLI (gh)"
+  echo "   • Git configuré"
+  echo "   • Clé SSH générée"
+  echo ""
+  echo -e "  ${YELLOW}${BOLD}Actions manuelles restantes :${NC}"
+  echo "   1. Ajoute ta clé SSH sur https://github.com/settings/ssh/new"
+  echo "   2. Lance : gh auth login"
+  echo "   3. Relance ton terminal (ou : exec zsh)"
+  echo "   4. Configure Powerlevel10k : p10k configure"
+  if [[ "$OS" == "linux" ]]; then
+    echo "   5. Déconnecte/reconnecte-toi pour utiliser Docker sans sudo"
+  fi
+  echo ""
+}
+
+# =============================================================================
+#  MAIN
+# =============================================================================
+main() {
+  echo -e "${CYAN}${BOLD}"
+  echo "  ╔══════════════════════════════════════╗"
+  echo "  ║     Setup Dev Env                    ║"
+  echo "  ║     WSL2 / Linux / macOS             ║"
+  echo "  ╚══════════════════════════════════════╝"
+  echo -e "${NC}"
+
+  check_not_root
+  detect_os
+
+  # Demander les infos utilisateur
+  echo ""
+  read -rp "  Ton nom Git : " GIT_NAME
+  read -rp "  Ton email Git : " GIT_EMAIL
+  echo ""
+
+  if [[ "$OS" == "linux" ]]; then
+    install_base_linux
+  else
+    install_homebrew
+    install_base_mac
+  fi
+
+  install_zsh
+  install_docker
+  install_kubectl
+  install_k9s
+  install_k3s
+  install_helm
+  install_terraform
+  install_nvm
+  install_pyenv
+  install_gh
+  configure_git
+  setup_ssh
+  print_summary
+}
+
+main "$@"

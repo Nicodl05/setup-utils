@@ -192,14 +192,19 @@ alias k="kubectl"
 alias tf="terraform"
 alias d="docker"
 alias dc="docker compose"
-alias lzd="lazydocker"
-alias ls="eza --icons --group-directories-first"
-alias ll="eza -lah --icons --group-directories-first"
+if command -v lazydocker >/dev/null 2>&1; then
+  alias lzd="lazydocker"
+fi
+if command -v eza >/dev/null 2>&1; then
+  alias ls="eza --icons --group-directories-first"
+  alias ll="eza -lah --icons --group-directories-first"
+else
+  alias ll="ls -lah"
+fi
 alias gs="git status"
 alias gp="git push"
 alias gl="git pull"
 alias gc="git commit -m"
-alias ll="ls -lah"
 
 # --- Powerlevel10k config ---
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
@@ -445,7 +450,24 @@ install_aws_cli() {
 
   info "Installation de AWS CLI..."
   if [[ "$OS" == "linux" ]]; then
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+    local arch aws_arch aws_url
+    arch="$(uname -m)"
+
+    case "$arch" in
+      x86_64|amd64)
+        aws_arch="x86_64"
+        ;;
+      aarch64|arm64)
+        aws_arch="aarch64"
+        ;;
+      *)
+        error "Architecture Linux non supportée pour l'installation automatique d'AWS CLI: $arch"
+        ;;
+    esac
+
+    aws_url="https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip"
+    info "Téléchargement de AWS CLI pour l'architecture ${aws_arch}..."
+    curl "$aws_url" -o "/tmp/awscliv2.zip"
     unzip -q /tmp/awscliv2.zip -d /tmp
     sudo /tmp/aws/install
     rm -rf /tmp/aws /tmp/awscliv2.zip
@@ -605,11 +627,9 @@ print_summary() {
   echo "   • GitHub CLI (gh)"
   echo "   • eza (ls moderne)"
   echo "   • lazydocker (TUI)"
-  echo "   • Git configuré"
-  echo "   • Clé SSH générée"
   echo ""
   echo -e "  ${YELLOW}${BOLD}Actions manuelles restantes :${NC}"
-  echo "   1. Ajoute ta clé SSH sur https://github.com/settings/ssh/new"
+  echo "   1. Si besoin, lance : ./setup-git.sh pour configurer Git et générer une clé SSH"
   echo "   2. Lance : gh auth login"
   echo "   3. Relance ton terminal (ou : exec zsh)"
   echo "   4. Configure Powerlevel10k : p10k configure"

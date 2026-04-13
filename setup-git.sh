@@ -46,6 +46,13 @@ install_git() {
       if ! command -v brew &>/dev/null; then
         info "Installation de Homebrew..."
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        
+        # Charger brew dans le shell courant pour macOS Intel/Silicon
+        if [[ -f /opt/homebrew/bin/brew ]]; then
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+        elif [[ -f /usr/local/bin/brew ]]; then
+          eval "$(/usr/local/bin/brew shellenv)"
+        fi
       fi
       brew install git
     fi
@@ -105,9 +112,14 @@ setup_ssh() {
     generate_ssh "$KEY"
   fi
 
-  # Démarrage de l'agent SSH et ajout de la clé
-  info "Ajout de la clé à l'agent SSH..."
-  eval "$(ssh-agent -s)"
+  # Gestion de l'agent SSH : réutiliser l'existant ou en lancer un seul
+  if [[ -z "$SSH_AUTH_SOCK" ]]; then
+    info "Démarrage d'un nouvel agent SSH..."
+    eval "$(ssh-agent -s)"
+  else
+    info "Utilisation de l'agent SSH existant ($SSH_AUTH_SOCK)"
+  fi
+
   if [[ "$OS" == "mac" ]]; then
     # Spécifique macOS pour sauver dans le keychain
     ssh-add --apple-use-keychain "$KEY"

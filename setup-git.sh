@@ -22,6 +22,15 @@ error()   { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 section() { echo -e "\n${CYAN}${BOLD}━━━ $1 ━━━${NC}\n"; }
 
 # =============================================================================
+#  GARDE-FOUS
+# =============================================================================
+check_not_root() {
+  if [[ $EUID -eq 0 ]]; then
+    error "Ce script ne doit pas être lancé en tant que root/sudo. Lance-le normalement."
+  fi
+}
+
+# =============================================================================
 #  DÉTECTION OS
 # =============================================================================
 detect_os() {
@@ -29,6 +38,10 @@ detect_os() {
     OS="mac"
   elif [[ -f /etc/os-release ]]; then
     OS="linux"
+    # Vérifier le gestionnaire de paquets
+    if ! command -v apt-get &>/dev/null; then
+      error "Seules les distributions basées sur Debian/Ubuntu (apt-get) sont supportées pour le moment."
+    fi
   else
     error "Système non supporté."
   fi
@@ -112,19 +125,19 @@ setup_ssh() {
     generate_ssh "$KEY"
   fi
 
-  # Gestion de l'agent SSH : réutiliser l'existant ou en lancer un seul
-  if [[ -z "$SSH_AUTH_SOCK" ]]; then
-    info "Démarrage d'un nouvel agent SSH..."
-    eval "$(ssh-agent -s)"
+  # Ajout à l'agent SSH si disponible
+  if [[ -n "$SSH_AUTH_SOCK" ]]; then
+    info "Ajout de la clé à l'agent SSH existant..."
+    if [[ "$OS" == "mac" ]]; then
+      ssh-add --apple-use-keychain "$KEY"
+    else
+      ssh-add "$KEY"
+    fi
   else
-    info "Utilisation de l'agent SSH existant ($SSH_AUTH_SOCK)"
-  fi
-
-  if [[ "$OS" == "mac" ]]; then
-    # Spécifique macOS pour sauver dans le keychain
-    ssh-add --apple-use-keychain "$KEY"
-  else
-    ssh-add "$KEY"
+    warn "Aucun agent SSH détecté (\$SSH_AUTH_SOCK est vide)."
+    info "Pour charger la clé, exécutez :"
+    echo "   eval \"\$(ssh-agent -s)\""
+    echo "   ssh-add $KEY"
   fi
 }
 
@@ -163,6 +176,7 @@ print_instructions() {
 #  MAIN
 # =============================================================================
 main() {
+  check_not_root
   detect_os
   install_git
   configure_git

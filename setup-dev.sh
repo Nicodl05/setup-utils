@@ -467,7 +467,13 @@ install_aws_cli() {
 
     aws_url="https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip"
     info "Téléchargement de AWS CLI pour l'architecture ${aws_arch}..."
-    curl "$aws_url" -o "/tmp/awscliv2.zip"
+    curl -fsSL "$aws_url" -o "/tmp/awscliv2.zip"
+    
+    # Vérifier que le fichier est bien un zip avant d'unziper
+    if ! file /tmp/awscliv2.zip | grep -q 'Zip archive data'; then
+      error "Le téléchargement de AWS CLI a échoué ou le fichier est corrompu."
+    fi
+
     unzip -q /tmp/awscliv2.zip -d /tmp
     sudo /tmp/aws/install
     rm -rf /tmp/aws /tmp/awscliv2.zip
@@ -492,7 +498,7 @@ install_gcloud() {
     # Ajout du repo officiel Google Cloud
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | \
       sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | \
+    curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | \
       sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
     sudo apt-get update -qq && sudo apt-get install -y google-cloud-cli
   else
@@ -537,7 +543,7 @@ install_lazydocker() {
 
   info "Installation de lazydocker..."
   if [[ "$OS" == "linux" ]]; then
-    curl https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
   else
     brew install jesseduffield/lazydocker/lazydocker
   fi
@@ -568,65 +574,30 @@ install_gh() {
 }
 
 # =============================================================================
-#  CONFIGURATION GIT
-# =============================================================================
-configure_git() {
-  section "Configuration Git"
-  git config --global user.name "$GIT_NAME"
-  git config --global user.email "$GIT_EMAIL"
-  git config --global init.defaultBranch main
-  git config --global pull.rebase false
-  git config --global core.autocrlf false   # important sous WSL
-  git config --global core.editor "code --wait" 2>/dev/null || \
-    git config --global core.editor "nano"
-  log "Git configuré ($GIT_NAME / $GIT_EMAIL)"
-}
-
-# =============================================================================
-#  CLÉ SSH GITHUB
-# =============================================================================
-setup_ssh() {
-  section "Clé SSH GitHub"
-  local KEY="$HOME/.ssh/id_ed25519"
-  if [[ -f "$KEY" ]]; then
-    log "Clé SSH déjà existante"
-  else
-    info "Génération de la clé SSH..."
-    mkdir -p "$HOME/.ssh"
-    ssh-keygen -t ed25519 -C "$GIT_EMAIL" -f "$KEY" -N ""
-    log "Clé SSH générée"
-  fi
-
-  echo ""
-  warn "Ajoute cette clé publique sur GitHub → Settings → SSH keys :"
-  echo ""
-  cat "$KEY.pub"
-  echo ""
-  info "Lien direct : https://github.com/settings/ssh/new"
-}
-
-# =============================================================================
 #  RÉSUMÉ FINAL
 # =============================================================================
 print_summary() {
   echo ""
   echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-  echo -e "${GREEN}${BOLD}  ✓ Installation terminée !${NC}"
+  echo -e "${GREEN}${BOLD}  ✓ Terminé !${NC}"
   echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
   echo ""
-  echo -e "  ${BOLD}Ce qui a été installé :${NC}"
-  echo "   • Zsh + Oh My Zsh + Powerlevel10k"
-  echo "   • Docker"
-  echo "   • kubectl + k9s + k3s + Helm"
-  echo "   • Terraform"
-  echo "   • NVM + Node.js LTS + TypeScript"
-  echo "   • Pyenv + Python 3.12 + Poetry + Ruff"
-  echo "   • Ansible"
-  echo "   • AWS CLI"
-  echo "   • Google Cloud SDK"
-  echo "   • GitHub CLI (gh)"
-  echo "   • eza (ls moderne)"
-  echo "   • lazydocker (TUI)"
+  echo -e "  ${BOLD}État de l'installation :${NC}"
+  
+  [[ $(command -v zsh) ]]         && echo -e "  - ${GREEN}✓${NC} Zsh"
+  [[ -d "$HOME/.oh-my-zsh" ]]    && echo -e "  - ${GREEN}✓${NC} Oh My Zsh + P10k"
+  [[ $(command -v docker) ]]      && echo -e "  - ${GREEN}✓${NC} Docker"
+  [[ $(command -v kubectl) ]]     && echo -e "  - ${GREEN}✓${NC} Kubernetes (kubectl/k9s/Helm)"
+  [[ $(command -v terraform) ]]   && echo -e "  - ${GREEN}✓${NC} Terraform"
+  [[ $(command -v nvm) ]]         && echo -e "  - ${GREEN}✓${NC} NVM / Node.js"
+  [[ $(command -v pyenv) ]]       && echo -e "  - ${GREEN}✓${NC} Pyenv / Python"
+  [[ $(command -v ansible) ]]     && echo -e "  - ${GREEN}✓${NC} Ansible"
+  [[ $(command -v aws) ]]         && echo -e "  - ${GREEN}✓${NC} AWS CLI"
+  [[ $(command -v gcloud) ]]      && echo -e "  - ${GREEN}✓${NC} Google Cloud SDK"
+  [[ $(command -v gh) ]]          && echo -e "  - ${GREEN}✓${NC} GitHub CLI"
+  [[ $(command -v eza) ]]         && echo -e "  - ${GREEN}✓${NC} eza"
+  [[ $(command -v lazydocker) ]]  && echo -e "  - ${GREEN}✓${NC} lazydocker"
+
   echo ""
   echo -e "  ${YELLOW}${BOLD}Actions manuelles restantes :${NC}"
   echo "   1. Si besoin, lance : ./setup-git.sh pour configurer Git et générer une clé SSH"

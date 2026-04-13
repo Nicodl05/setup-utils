@@ -385,6 +385,28 @@ install_pyenv() {
 }
 
 # =============================================================================
+#  ANSIBLE
+# =============================================================================
+install_ansible() {
+  section "Ansible"
+  if command -v ansible &>/dev/null; then
+    log "Ansible déjà installé ($(ansible --version | head -1))"
+    return
+  fi
+
+  if [[ "$OS" == "linux" ]]; then
+    info "Installation d'Ansible via pipx..."
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init -)" 2>/dev/null || true
+    pipx install ansible --include-deps
+  else
+    brew install ansible
+  fi
+  log "Ansible installé ($(ansible --version | head -1))"
+}
+
+# =============================================================================
 #  GH CLI (GitHub)
 # =============================================================================
 install_gh() {
@@ -461,6 +483,7 @@ print_summary() {
   echo "   • Terraform"
   echo "   • NVM + Node.js LTS + TypeScript"
   echo "   • Pyenv + Python 3.12 + Poetry + Ruff"
+  echo "   • Ansible"
   echo "   • GitHub CLI (gh)"
   echo "   • Git configuré"
   echo "   • Clé SSH générée"
@@ -512,6 +535,7 @@ main() {
   install_terraform
   install_nvm
   install_pyenv
+  install_ansible
   install_gh
   configure_git
   setup_ssh

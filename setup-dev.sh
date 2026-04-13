@@ -192,14 +192,19 @@ alias k="kubectl"
 alias tf="terraform"
 alias d="docker"
 alias dc="docker compose"
-alias lzd="lazydocker"
-alias ls="eza --icons --group-directories-first"
-alias ll="eza -lah --icons --group-directories-first"
+if command -v lazydocker >/dev/null 2>&1; then
+  alias lzd="lazydocker"
+fi
+if command -v eza >/dev/null 2>&1; then
+  alias ls="eza --icons --group-directories-first"
+  alias ll="eza -lah --icons --group-directories-first"
+else
+  alias ll="ls -lah"
+fi
 alias gs="git status"
 alias gp="git push"
 alias gl="git pull"
 alias gc="git commit -m"
-alias ll="ls -lah"
 
 # --- Powerlevel10k config ---
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh

@@ -450,7 +450,24 @@ install_aws_cli() {
 
   info "Installation de AWS CLI..."
   if [[ "$OS" == "linux" ]]; then
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+    local arch aws_arch aws_url
+    arch="$(uname -m)"
+
+    case "$arch" in
+      x86_64|amd64)
+        aws_arch="x86_64"
+        ;;
+      aarch64|arm64)
+        aws_arch="aarch64"
+        ;;
+      *)
+        error "Architecture Linux non supportée pour l'installation automatique d'AWS CLI: $arch"
+        ;;
+    esac
+
+    aws_url="https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip"
+    info "Téléchargement de AWS CLI pour l'architecture ${aws_arch}..."
+    curl "$aws_url" -o "/tmp/awscliv2.zip"
     unzip -q /tmp/awscliv2.zip -d /tmp
     sudo /tmp/aws/install
     rm -rf /tmp/aws /tmp/awscliv2.zip

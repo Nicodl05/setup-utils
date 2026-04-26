@@ -164,6 +164,7 @@ plugins=(
   zsh-autosuggestions
   zsh-syntax-highlighting
   docker
+  docker-compose
   kubectl
   terraform
   helm
@@ -242,6 +243,26 @@ install_docker() {
   fi
 }
 
+
+# =============================================================================
+#  DOCKER-COMPOSE
+# =============================================================================
+install_docker_compose(){
+  section "Docker-Compose"
+  if command -v docker-compose &>/dev/null; then
+    log "Docker-Compose déjà installé ($(docker-compose --version))"
+    return
+  fi
+  if [[ "$OS" == "linux" ]]; then
+    info "Installation de Docker-Compose via apt..."
+    sudo apt-get update -qq
+    sudo apt-get install -y docker-compose
+    log "Docker-Compose installé ($(docker-compose --version))"
+  else
+    brew install docker-compose
+    log "Docker-Compose installé ($(docker-compose --version))"
+  fi
+}
 # =============================================================================
 #  KUBECTL
 # =============================================================================
@@ -587,6 +608,7 @@ print_summary() {
   [[ $(command -v zsh) ]]         && echo -e "  - ${GREEN}✓${NC} Zsh"
   [[ -d "$HOME/.oh-my-zsh" ]]    && echo -e "  - ${GREEN}✓${NC} Oh My Zsh + P10k"
   [[ $(command -v docker) ]]      && echo -e "  - ${GREEN}✓${NC} Docker"
+  [[ $(command -v docker-compose) ]] && echo -e "  - ${GREEN}✓${NC} Docker-Compose"
   [[ $(command -v kubectl) ]]     && echo -e "  - ${GREEN}✓${NC} Kubernetes (kubectl/k9s/Helm)"
   [[ $(command -v terraform) ]]   && echo -e "  - ${GREEN}✓${NC} Terraform"
   [[ $(command -v nvm) ]]         && echo -e "  - ${GREEN}✓${NC} NVM / Node.js"
@@ -636,6 +658,7 @@ main() {
 
   confirm "Installer Zsh + Oh My Zsh ?"           && install_zsh
   confirm "Installer Docker ?"                   && install_docker
+  confirm "Installer Docker-Compose ?"          && install_docker_compose
   confirm "Installer kubectl ?"                  && install_kubectl
   confirm "Installer k9s ?"                      && install_k9s
   confirm "Installer k3s (Kubernetes local) ?"   && install_k3s
